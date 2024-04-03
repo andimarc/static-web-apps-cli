@@ -1,31 +1,60 @@
 import type http from "http";
 import { logger, serializeCookie } from "../../core";
 
-const authPaths: Path[] = [
-  {
-    method: "GET",
-    route: /^\/\.auth\/login\/(?<provider>aad|github|twitter|google|facebook|[a-z]+)/,
-    function: "auth-login-provider",
-  },
-  {
-    method: "GET",
-    route: /^\/\.auth\/me/,
-    function: "auth-me",
-  },
-  {
-    method: "GET",
-    route: /^\/\.auth\/logout/,
-    function: "auth-logout",
-  },
-  {
-    method: "GET",
-    route: /^\/\.auth\/purge\/(?<provider>aad|github|twitter|google|facebook|[a-z]+)/,
-    // locally, all purge requests are processed as logout requests
-    function: "auth-logout",
-  },
-];
+function getAuthPaths(isCustomAuth: boolean): Path[] {
+  const paths: Path[] = [];
 
-async function routeMatcher(url = "/"): Promise<{ func: Function | undefined; bindingData: undefined | { provider: string } }> {
+  if (isCustomAuth) {
+    paths.push({
+      method: "GET",
+      route: /^\/\.auth\/login\/(?<provider>aad|github|twitter|google|facebook|[a-z]+)\/callback/,
+      function: "auth-login-provider-callback",
+    });
+    paths.push({
+      method: "GET",
+      route: /^\/\.auth\/login\/(?<provider>aad|github|twitter|google|facebook|[a-z]+)/,
+      function: "auth-login-provider-custom",
+    });
+    paths.push({
+      method: "POST",
+      route: /^\/\.auth\/complete/,
+      function: "auth-complete",
+    });
+  } else {
+    paths.push({
+      method: "GET",
+      route: /^\/\.auth\/login\/(?<provider>aad|github|twitter|google|facebook|[a-z]+)/,
+      function: "auth-login-provider",
+    });
+  }
+
+  paths.push(
+    {
+      method: "GET",
+      route: /^\/\.auth\/me/,
+      function: "auth-me",
+    },
+    {
+      method: "GET",
+      route: /^\/\.auth\/logout/,
+      function: "auth-logout",
+    },
+    {
+      method: "GET",
+      route: /^\/\.auth\/purge\/(?<provider>aad|github|twitter|google|facebook|[a-z]+)/,
+      // locally, all purge requests are processed as logout requests
+      function: "auth-logout",
+    }
+  );
+
+  return paths;
+}
+
+async function routeMatcher(
+  url = "/",
+  isCustomAuth?: boolean
+): Promise<{ func: Function | undefined; bindingData: undefined | { provider: string } }> {
+  const authPaths = getAuthPaths(!!isCustomAuth);
   for (let index = 0; index < authPaths.length; index++) {
     const path = authPaths[index];
     const match = url.match(new RegExp(path.route));
@@ -45,7 +74,7 @@ async function routeMatcher(url = "/"): Promise<{ func: Function | undefined; bi
   return { func: undefined, bindingData: undefined };
 }
 
-export async function processAuth(request: http.IncomingMessage, response: http.ServerResponse, rewriteUrl?: string) {
+export async function processAuth(request: http.IncomingMessage, response: http.ServerResponse, rewriteUrl?: string, isCustomAuth?: boolean) {
   let defaultStatus = 200;
   const context: Context = {
     invocationId: new Date().getTime().toString(36) + Math.random().toString(36).slice(2),
@@ -53,7 +82,7 @@ export async function processAuth(request: http.IncomingMessage, response: http.
     res: {},
   };
 
-  const { func, bindingData } = await routeMatcher(rewriteUrl || request.url);
+  const { func, bindingData } = await routeMatcher(rewriteUrl || request.url, isCustomAuth);
   if (func) {
     context.bindingData = bindingData;
     try {

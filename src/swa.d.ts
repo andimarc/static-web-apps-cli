@@ -284,6 +284,72 @@ declare type SWAConfigFileMimeTypes = {
   [key: string]: string;
 };
 
+declare type MicrosoftEntraIdV1AuthIdentityProvider = {
+  userDetailsClaim: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name";
+  registration: {
+    openIdIssuer: string; // ex: https://login.microsoftonline.com/<TENANT_ID>,
+    clientIdSettingName: string;
+    clientSecretSettingName: string;
+  };
+};
+
+declare type MicrosoftEntraIdV2AuthIdentityProvider = {
+  registration: {
+    openIdIssuer: string; // ex: https://login.microsoftonline.com/<TENANT_ID>/v2.0,
+    clientIdSettingName: string;
+    clientSecretSettingName: string;
+  };
+};
+
+declare type AppleAuthIdentityProvider = {
+  registration: {
+    clientIdSettingName: string;
+    clientSecretSettingName: string;
+  };
+};
+
+declare type FacebookAuthIdentityProvider = {
+  registration: {
+    appIdSettingName: string;
+    appSecretSettingName: string;
+  };
+};
+
+declare type GithubAuthIdentityProvider = {
+  registration: {
+    clientIdSettingName: string;
+    clientSecretSettingName: string;
+  };
+};
+
+declare type GoogleAuthIdentityProvider = {
+  registration: {
+    clientIdSettingName: string;
+    clientSecretSettingName: string;
+  };
+};
+
+declare type TwitterAuthIdentityProvider = {
+  registration: {
+    consumerKeySettingName: string;
+    consumerSecretSettingName: string;
+  };
+};
+
+declare type SWAConfigFileAuthIdenityProviders = {
+  azureActiveDirectory?: MicrosoftEntraIdV1AuthIdentityProvider | MicrosoftEntraIdV2AuthIdentityProvider;
+  apple?: AppleAuthIdentityProvider;
+  facebook?: FacebookAuthIdentityProvider;
+  github?: GithubAuthIdentityProvider;
+  google?: GoogleAuthIdentityProvider;
+  twitter?: TwitterAuthIdentityProvider;
+};
+
+declare type SWAConfigFileAuth = {
+  rolesSource?: string;
+  identityProviders: SWAConfigFileAuthIdenityProviders;
+};
+
 declare type SWAConfigFile = {
   routes: SWAConfigFileRoute[];
   navigationFallback: SWAConfigFileNavigationFallback;
@@ -291,6 +357,7 @@ declare type SWAConfigFile = {
   globalHeaders: SWAConfigFileGlobalHeaders;
   mimeTypes: SWAConfigFileMimeTypes;
   isLegacyConfigFile: boolean;
+  auth?: SWAConfigFileAuth;
 };
 
 declare type DebugFilterLevel = "silly" | "silent" | "log" | "info" | "error";
@@ -369,4 +436,17 @@ declare type DataApiBuilderLocalMetadata = LocalBinaryMetadata;
 const binaryType = {
   StaticSiteClient: 1,
   DataApiBuilder: 2,
+};
+
+declare type RolesSourceFunctionRequestBody = {
+  identityProvider: string;
+  userId?: string;
+  userDetails?: string;
+  claims?: RolesSourceClaim[];
+  accessToken?: string;
+};
+
+declare type RolesSourceClaim = {
+  typ: string;
+  val: string;
 };

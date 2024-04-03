@@ -267,8 +267,13 @@ export async function requestMiddleware(
 
   logger.silly(`checking auth request`);
   if (isAuthReq) {
-    logger.silly(` - auth request detected`);
-    return await handleAuthRequest(req, res, matchingRouteRule, userConfig);
+    if (userConfig?.auth) {
+      logger.silly(` - auth request detected - custom auth`);
+      return await handleAuthRequest(req, res, matchingRouteRule, userConfig);
+    } else {
+      logger.silly(` - auth request detected - built-in auth`);
+      return await handleAuthRequest(req, res, matchingRouteRule, userConfig);
+    }
   } else {
     logger.silly(` - not an auth request`);
   }
@@ -296,7 +301,14 @@ export async function requestMiddleware(
 
   logger.silly(`checking rewrite auth login request`);
   if (urlPathnameWithQueryParams && isLoginRequest(urlPathnameWithoutQueryParams)) {
-    logger.silly(` - auth login dectected`);
+    if (userConfig?.auth) {
+      logger.silly(` - auth login dectected - custom auth`);
+
+      authStatus = AUTH_STATUS.HostNameAuthLogin;
+      req.url = url.toString();
+      return await handleAuthRequest(req, res, matchingRouteRule, userConfig);
+    }
+    logger.silly(` - auth login dectected - built-in auth`);
 
     authStatus = AUTH_STATUS.HostNameAuthLogin;
     req.url = url.toString();

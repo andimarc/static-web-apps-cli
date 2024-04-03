@@ -14,6 +14,19 @@
       // "args": ["-i"],
       "preLaunchTask": "build",
       "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "command": "node c:\\git-repos\\andimarc-static-web-apps-cli\\dist\\cli\\bin.js start http://localhost:3000 --api-devserver-url http://localhost:3001 -w C:\\git-repos\\todo",
+      "name": "buildAndRunCli",
+      "request": "launch",
+      "type": "node-terminal",
+      "preLaunchTask": "build"
+    },
+    {
+      "command": "node c:\\git-repos\\andimarc-static-web-apps-cli\\dist\\cli\\bin.js start http://localhost:3000 --api-devserver-url http://localhost:3001 -w C:\\git-repos\\todo",
+      "name": "runCli",
+      "request": "launch",
+      "type": "node-terminal"
     }
   ]
 }
