@@ -52,9 +52,9 @@ function getAuthPaths(isCustomAuth: boolean): Path[] {
 
 async function routeMatcher(
   url = "/",
-  isCustomAuth?: boolean
+  customAuth: SWAConfigFileAuth | undefined
 ): Promise<{ func: Function | undefined; bindingData: undefined | { provider: string } }> {
-  const authPaths = getAuthPaths(!!isCustomAuth);
+  const authPaths = getAuthPaths(!!customAuth);
   for (let index = 0; index < authPaths.length; index++) {
     const path = authPaths[index];
     const match = url.match(new RegExp(path.route));
@@ -74,7 +74,7 @@ async function routeMatcher(
   return { func: undefined, bindingData: undefined };
 }
 
-export async function processAuth(request: http.IncomingMessage, response: http.ServerResponse, rewriteUrl?: string, isCustomAuth?: boolean) {
+export async function processAuth(request: http.IncomingMessage, response: http.ServerResponse, rewriteUrl?: string, customAuth?: SWAConfigFileAuth) {
   let defaultStatus = 200;
   const context: Context = {
     invocationId: new Date().getTime().toString(36) + Math.random().toString(36).slice(2),
@@ -82,11 +82,11 @@ export async function processAuth(request: http.IncomingMessage, response: http.
     res: {},
   };
 
-  const { func, bindingData } = await routeMatcher(rewriteUrl || request.url, isCustomAuth);
+  const { func, bindingData } = await routeMatcher(rewriteUrl || request.url, customAuth);
   if (func) {
     context.bindingData = bindingData;
     try {
-      await func(context, request);
+      await func(context, request, customAuth);
 
       for (const key in context.res.headers) {
         const element = context.res.headers[key];

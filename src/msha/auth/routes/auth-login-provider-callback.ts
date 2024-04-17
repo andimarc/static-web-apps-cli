@@ -11,14 +11,14 @@ const hashStateGuid = function (guid: string) {
   return hash.digest("hex");
 };
 
-const getAuthToken = function (codeValue: string) {
+const getGithubAuthToken = function (codeValue: string, clientId: string, clientSecret: string) {
   const hashedState = hashStateGuid("abcdefg");
   console.log(hashedState);
 
   const data = querystring.stringify({
     code: codeValue,
-    client_id: process.env.GITHUB_CLIENT_ID,
-    client_secret: process.env.GITHUB_CLIENT_SECRET,
+    client_id: clientId,
+    client_secret: clientSecret,
   });
 
   const options = {
@@ -54,13 +54,94 @@ const getAuthToken = function (codeValue: string) {
   });
 };
 
-const getUser = function (accessToken: string) {
+const getGitHubUser = function (accessToken: string) {
   const hashedState = hashStateGuid("abcdefg");
   console.log(hashedState);
 
   const options = {
     host: "api.github.com",
     path: "/user",
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "User-Agent": "Azure Static Web Apps Emulator",
+    },
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      res.setEncoding("utf8");
+      let responseBody = "";
+
+      res.on("data", (chunk) => {
+        responseBody += chunk;
+      });
+
+      res.on("end", () => {
+        resolve(JSON.parse(responseBody));
+      });
+    });
+
+    req.on("error", (err) => {
+      reject(err);
+    });
+
+    req.end();
+  });
+};
+
+const getGoogleAuthToken = function (codeValue: string, clientId: string, clientSecret: string) {
+  const hashedState = hashStateGuid("abcdefg");
+  console.log(hashedState);
+
+  const data = querystring.stringify({
+    code: codeValue,
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: "authorization_code",
+    redirect_uri: "http://localhost:4280/.auth/login/google/callback",
+  });
+
+  const options = {
+    host: "oauth2.googleapis.com",
+    path: "/token",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Length": Buffer.byteLength(data),
+    },
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      res.setEncoding("utf8");
+      let responseBody = "";
+
+      res.on("data", (chunk) => {
+        responseBody += chunk;
+      });
+
+      res.on("end", () => {
+        resolve(responseBody);
+      });
+    });
+
+    req.on("error", (err) => {
+      reject(err);
+    });
+
+    req.write(data);
+    req.end();
+  });
+};
+
+const getGoogleUser = function (accessToken: string) {
+  const hashedState = hashStateGuid("abcdefg");
+  console.log(hashedState);
+
+  const options = {
+    host: "googleapis.com",
+    path: "/oauth2/v1/userinfo",
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -134,7 +215,7 @@ const getRoles = function (clientPrincipal: RolesSourceFunctionRequestBody) {
   });
 };
 
-const httpTrigger = async function (context: Context, request: http.IncomingMessage) {
+const httpTrigger = async function (context: Context, request: http.IncomingMessage, customAuth?: SWAConfigFileAuth) {
   console.log(request.url);
 
   const url = new URL(request.url!, `${SWA_CLI_APP_PROTOCOL}://${request?.headers?.host}`);
@@ -145,65 +226,209 @@ const httpTrigger = async function (context: Context, request: http.IncomingMess
   const codeValue = url.searchParams.get("code");
   console.log(`code: ${codeValue}`);
 
-  const authTokenResponse = (await getAuthToken(codeValue!)) as string;
-  console.log(authTokenResponse);
+  if (context.bindingData?.provider === "github") {
+    const { clientIdSettingName, clientSecretSettingName } = customAuth?.identityProviders?.github?.registration || {};
 
-  const authTokenParsed = querystring.parse(authTokenResponse);
+    if (!clientIdSettingName) {
+      context.res = response({
+        context,
+        status: 404,
+        body: `ClientIdSettingName not found for GitHub provider`,
+      });
+      return;
+    }
 
-  const authToken = authTokenParsed["access_token"] as string;
+    if (!clientSecretSettingName) {
+      context.res = response({
+        context,
+        status: 404,
+        body: `ClientSecretSettingName not found for GitHub provider`,
+      });
+      return;
+    }
 
-  const user = (await getUser(authToken)) as { [key: string]: string };
+    const clientId = process.env[clientIdSettingName];
 
-  console.log(authToken);
+    if (!clientId) {
+      context.res = response({
+        context,
+        status: 404,
+        body: `ClientId not found for GitHub provider`,
+      });
+      return;
+    }
 
-  const identityProvider = "github";
-  const userId = user["id"];
-  const userDetails = user["login"];
+    const clientSecret = process.env[clientSecretSettingName];
 
-  const claims: { typ: string; val: string }[] = [
-    {
-      typ: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
-      val: userId,
-    },
-  ];
+    if (!clientSecret) {
+      context.res = response({
+        context,
+        status: 404,
+        body: `ClientSecret not found for Google provider`,
+      });
+      return;
+    }
 
-  Object.keys(user).forEach((key) => {
-    claims.push({
-      typ: `urn:github:${key}`,
-      val: user[key],
-    });
-  });
+    const authTokenResponse = (await getGithubAuthToken(codeValue!, clientId, clientSecret)) as string;
+    console.log(authTokenResponse);
 
-  const clientPrincipal = {
-    identityProvider,
-    userId,
-    userDetails,
-    claims,
-    userRoles: ["authenticated", "anonymous"],
-  };
+    const authTokenParsed = querystring.parse(authTokenResponse);
 
-  const rolesResult = (await getRoles(clientPrincipal)) as { roles: string[] };
+    const authToken = authTokenParsed["access_token"] as string;
 
-  clientPrincipal.userRoles.push(...rolesResult.roles);
+    const user = (await getGitHubUser(authToken)) as { [key: string]: string };
 
-  context.res = response({
-    context,
-    cookies: [
+    console.log(authToken);
+
+    const userId = user["id"];
+    const userDetails = user["login"];
+
+    const claims: { typ: string; val: string }[] = [
       {
-        name: "StaticWebAppsAuthCookie",
-        value: btoa(JSON.stringify(clientPrincipal)),
-        domain: "localhost",
-        path: "/",
-        expires: new Date(Date.now() + 1000 * 60 * 60),
+        typ: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
+        val: userId,
       },
-    ],
-    status: 302,
-    headers: {
+    ];
+
+    Object.keys(user).forEach((key) => {
+      claims.push({
+        typ: `urn:github:${key}`,
+        val: user[key],
+      });
+    });
+
+    const clientPrincipal = {
+      identityProvider: context.bindingData.provider,
+      userId,
+      userDetails,
+      claims,
+      userRoles: ["authenticated", "anonymous"],
+    };
+
+    const rolesResult = (await getRoles(clientPrincipal)) as { roles: string[] };
+
+    clientPrincipal.userRoles.push(...rolesResult.roles);
+
+    context.res = response({
+      context,
+      cookies: [
+        {
+          name: "StaticWebAppsAuthCookie",
+          value: btoa(JSON.stringify(clientPrincipal)),
+          domain: "localhost",
+          path: "/",
+          expires: new Date(Date.now() + 1000 * 60 * 60),
+        },
+      ],
       status: 302,
-      Location: `http://localhost:4280`,
-    },
-    body: "",
-  });
+      headers: {
+        status: 302,
+        Location: `http://localhost:4280`,
+      },
+      body: "",
+    });
+  } else if (context.bindingData?.provider === "google") {
+    const { clientIdSettingName, clientSecretSettingName } = customAuth?.identityProviders?.google?.registration || {};
+
+    if (!clientIdSettingName) {
+      context.res = response({
+        context,
+        status: 404,
+        body: `ClientIdSettingName not found for Google provider`,
+      });
+      return;
+    }
+
+    if (!clientSecretSettingName) {
+      context.res = response({
+        context,
+        status: 404,
+        body: `ClientSecretSettingName not found for Google provider`,
+      });
+      return;
+    }
+
+    const clientId = process.env[clientIdSettingName];
+
+    if (!clientId) {
+      context.res = response({
+        context,
+        status: 404,
+        body: `ClientId not found for Google provider`,
+      });
+      return;
+    }
+
+    const clientSecret = process.env[clientSecretSettingName];
+
+    if (!clientSecret) {
+      context.res = response({
+        context,
+        status: 404,
+        body: `ClientSecret not found for Google provider`,
+      });
+      return;
+    }
+
+    const authTokenResponse = (await getGoogleAuthToken(codeValue!, clientId, clientSecret)) as string;
+    console.log(authTokenResponse);
+
+    const authTokenParsed = querystring.parse(authTokenResponse);
+
+    const authToken = authTokenParsed["access_token"] as string;
+
+    const user = (await getGoogleUser(authToken)) as { [key: string]: string };
+
+    console.log(authToken);
+
+    const userId = user["id"];
+    const userDetails = user["login"];
+
+    const claims: { typ: string; val: string }[] = [
+      {
+        typ: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
+        val: userId,
+      },
+    ];
+
+    Object.keys(user).forEach((key) => {
+      claims.push({
+        typ: `urn:google:${key}`,
+        val: user[key],
+      });
+    });
+
+    const clientPrincipal = {
+      identityProvider: context.bindingData.provider,
+      userId,
+      userDetails,
+      claims,
+      userRoles: ["authenticated", "anonymous"],
+    };
+
+    const rolesResult = (await getRoles(clientPrincipal)) as { roles: string[] };
+
+    clientPrincipal.userRoles.push(...rolesResult.roles);
+
+    context.res = response({
+      context,
+      cookies: [
+        {
+          name: "StaticWebAppsAuthCookie",
+          value: btoa(JSON.stringify(clientPrincipal)),
+          domain: "localhost",
+          path: "/",
+          expires: new Date(Date.now() + 1000 * 60 * 60),
+        },
+      ],
+      status: 302,
+      headers: {
+        status: 302,
+        Location: `http://localhost:4280`,
+      },
+      body: "",
+    });
+  }
 };
 
 export default httpTrigger;
