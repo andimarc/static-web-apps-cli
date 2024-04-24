@@ -140,8 +140,8 @@ const getGoogleUser = function (accessToken: string) {
   console.log(hashedState);
 
   const options = {
-    host: "googleapis.com",
-    path: "/oauth2/v1/userinfo",
+    host: "www.googleapis.com",
+    path: "/oauth2/v2/userinfo",
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -373,7 +373,7 @@ const httpTrigger = async function (context: Context, request: http.IncomingMess
     const authTokenResponse = (await getGoogleAuthToken(codeValue!, clientId, clientSecret)) as string;
     console.log(authTokenResponse);
 
-    const authTokenParsed = querystring.parse(authTokenResponse);
+    const authTokenParsed = JSON.parse(authTokenResponse);
 
     const authToken = authTokenParsed["access_token"] as string;
 
@@ -382,21 +382,91 @@ const httpTrigger = async function (context: Context, request: http.IncomingMess
     console.log(authToken);
 
     const userId = user["id"];
-    const userDetails = user["login"];
+    const userDetails = user["email"];
+    const verifiedEmail = user["verified_email"];
+    const name = user["name"];
+    const givenName = user["given_name"];
+    const familyName = user["family_name"];
+    const picture = user["picture"];
 
     const claims: { typ: string; val: string }[] = [
       {
-        typ: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
-        val: userId,
+        typ: "iss",
+        val: "https://accounts.google.com",
+      },
+      {
+        typ: "azp",
+        val: clientId,
+      },
+      {
+        typ: "aud",
+        val: clientId,
       },
     ];
 
-    Object.keys(user).forEach((key) => {
+    if (userId) {
       claims.push({
-        typ: `urn:google:${key}`,
-        val: user[key],
+        typ: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier",
+        val: userId,
       });
-    });
+    }
+
+    if (userDetails) {
+      claims.push({
+        typ: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+        val: userDetails,
+      });
+    }
+
+    if (verifiedEmail !== undefined) {
+      claims.push({
+        typ: "email_verified",
+        val: verifiedEmail,
+      });
+    }
+
+    if (name) {
+      claims.push({
+        typ: "name",
+        val: name,
+      });
+    }
+
+    if (picture) {
+      claims.push({
+        typ: "picture",
+        val: picture,
+      });
+    }
+
+    if (givenName) {
+      claims.push({
+        typ: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname",
+        val: givenName,
+      });
+    }
+
+    if (familyName) {
+      claims.push({
+        typ: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname",
+        val: familyName,
+      });
+    }
+
+    // claims.push(
+    //   {
+    //     "typ": "at_hash",
+    //     "val": "k5zIozWBiWhvxyX3mFCC1A"
+    //   },
+    //   {
+    //     "typ": "iat",
+    //     "val": "1713891013"
+    //   },
+    //   {
+    //     "typ": "exp",
+    //     "val": "1713894613"
+    //   }
+    // );
 
     const clientPrincipal = {
       identityProvider: context.bindingData.provider,
